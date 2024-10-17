@@ -18,42 +18,17 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include "FreeRTOS.h"
+#include <ranges>
+#include <utility>
+#include <vector>
 
 #include "cmsis_os.h"
 #include "main.h"
+#include "pins.h"
+#include "stm32l4xx_hal_gpio.h"
 #include "task.h"
+#include "taskUtils.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-typedef StaticTask_t osStaticThreadDef_t;
-typedef StaticQueue_t osStaticMessageQDef_t;
-typedef StaticTimer_t osStaticTimerDef_t;
-typedef StaticSemaphore_t osStaticMutexDef_t;
-typedef StaticSemaphore_t osStaticSemaphoreDef_t;
-typedef StaticEventGroup_t osStaticEventGroupDef_t;
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-/* USER CODE BEGIN Variables */
-
-/* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 uint32_t defaultTaskBuffer[128];
@@ -66,18 +41,7 @@ const osThreadAttr_t defaultTask_attributes = {
     .stack_size = sizeof(defaultTaskBuffer),
     .priority = (osPriority_t)osPriorityNormal,
 };
-/* Definitions for myTask02 */
-osThreadId_t myTask02Handle;
-uint32_t myTask02Buffer[128];
-osStaticThreadDef_t myTask02ControlBlock;
-const osThreadAttr_t myTask02_attributes = {
-    .name = "myTask02",
-    .cb_mem = &myTask02ControlBlock,
-    .cb_size = sizeof(myTask02ControlBlock),
-    .stack_mem = &myTask02Buffer[0],
-    .stack_size = sizeof(myTask02Buffer),
-    .priority = (osPriority_t)osPriorityNormal1,
-};
+
 /* Definitions for myQueue01 */
 osMessageQueueId_t myQueue01Handle;
 uint8_t myQueue01Buffer[16 * sizeof(uint16_t)];
@@ -201,7 +165,6 @@ const osEventFlagsAttr_t myEvent02_attributes = {
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
-void StartTask02(void *argument);
 void Callback01(void *argument);
 void Callback02(void *argument);
 
@@ -351,9 +314,6 @@ void MX_FREERTOS_Init(void) {
     /* creation of defaultTask */
     defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-    /* creation of myTask02 */
-    myTask02Handle = osThreadNew(StartTask02, NULL, &myTask02_attributes);
-
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
     /* USER CODE END RTOS_THREADS */
@@ -387,20 +347,65 @@ void StartDefaultTask(void *argument) {
     /* USER CODE END StartDefaultTask */
 }
 
-/* USER CODE BEGIN Header_StartTask02 */
 /**
  * @brief Function implementing the myTask02 thread.
  * @param argument: Not used
  * @retval None
  */
-/* USER CODE END Header_StartTask02 */
-void StartTask02(void *argument) {
-    /* USER CODE BEGIN StartTask02 */
-    /* Infinite loop */
-    for (;;) {
-        osDelay(1);
+void HeartbeatTask(void *argument) {
+    /* Add your application code here */
+    LL_GPIO_InitTypeDef btn = {.Pin = LL_GPIO_PIN_13,
+                               .Mode = LL_GPIO_MODE_INPUT,
+                               .Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH,
+                               .OutputType = LL_GPIO_OUTPUT_PUSHPULL,
+                               .Pull = LL_GPIO_PULL_NO,
+                               .Alternate = LL_GPIO_AF_0};
+    LL_GPIO_InitTypeDef led1 = {.Pin = LD1_PIN,
+                                .Mode = LL_GPIO_MODE_OUTPUT,
+                                .Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH,
+                                .OutputType = LL_GPIO_OUTPUT_PUSHPULL,
+                                .Pull = LL_GPIO_PULL_NO,
+                                .Alternate = LL_GPIO_AF_0};
+    LL_GPIO_InitTypeDef led2 = {.Pin = LD2_PIN,
+                                .Mode = LL_GPIO_MODE_OUTPUT,
+                                .Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH,
+                                .OutputType = LL_GPIO_OUTPUT_PUSHPULL,
+                                .Pull = LL_GPIO_PULL_NO,
+                                .Alternate = LL_GPIO_AF_0};
+    LL_GPIO_InitTypeDef led3 = {.Pin = LD3_PIN,
+                                .Mode = LL_GPIO_MODE_OUTPUT,
+                                .Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH,
+                                .OutputType = LL_GPIO_OUTPUT_PUSHPULL,
+                                .Pull = LL_GPIO_PULL_NO,
+                                .Alternate = LL_GPIO_AF_0};
+
+    std::vector<std::pair<GPIO_TypeDef *, LL_GPIO_InitTypeDef>> pins = {
+        {GPIOC, btn}, {LD1_PORT, led1}, {LD2_PORT, led2}, {LD3_PORT, led3}};
+
+    std::vector<std::pair<GPIO_TypeDef *, LL_GPIO_InitTypeDef>> leds = {
+        std::vector<std::pair<GPIO_TypeDef *, LL_GPIO_InitTypeDef>>(pins.begin() + 1, pins.end()),
+    };
+
+    // Initialize pins
+    for (auto [port, pin] : pins) {
+        LL_GPIO_Init(port, &pin);
     }
-    /* USER CODE END StartTask02 */
+
+    for (auto [port, pin] : leds) {
+        LL_GPIO_SetOutputPin(port, pin.Pin);
+    }
+
+    while (true) {
+        for (auto [port, pin] : leds) {
+            LL_GPIO_TogglePin(port, pin.Pin);
+            LL_mDelay(50);
+        }
+
+        for (auto [port, pin] : std::ranges::reverse_view(leds)) {
+            LL_GPIO_TogglePin(port, pin.Pin);
+            LL_mDelay(50);
+        }
+    }
 }
 
 /* Callback01 function */
